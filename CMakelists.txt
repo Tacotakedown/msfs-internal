@@ -1,0 +1,41 @@
+cmake_minimum_required(VERSION 3.10)
+project(MSFS_Internal)
+
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+set(SOURCES
+    src/main.cpp
+    src/main.h
+    dependencies/imgui/imgui.cpp
+    dependencies/imgui/imgui_demo.cpp
+    dependencies/imgui/imgui_draw.cpp
+    dependencies/imgui/imgui_widgets.cpp
+    dependencies/imgui/imgui_impl_dx11.cpp
+    dependencies/imgui/imgui_impl_win32.cpp
+)
+
+set(KIERO_SOURCES
+    dependencies/kiero/kiero.cpp
+)
+
+include_directories(dependencies/imgui)
+include_directories(dependencies/kiero)
+include_directories(dependencies/minhook/include)
+
+
+set(DIRECTX_SDK_LIB_DIR "C:/Program Files (x86)/Microsoft DirectX SDK (June 2010)/Lib/x64")
+
+find_library(KERNEL32_LIBRARY kernel32.lib PATHS "C:/Program Files (x86)/Windows Kits/10/Lib/10.0.22621.0/um/x64/")
+find_library(USER32_LIBRARY user32.lib PATHS "C:/Program Files (x86)/Windows Kits/10/Lib/10.0.22621.0/um/x64/")
+find_library(GDI32_LIBRARY gdi32.lib PATHS "C:/Program Files (x86)/Windows Kits/10/Lib/10.0.22621.0/um/x64/")
+find_library(D3D11_LIBRARY d3d11.lib PATHS ${DIRECTX_SDK_LIB_DIR})
+find_library(DXGI_LIBRARY dxgi.lib PATHS ${DIRECTX_SDK_LIB_DIR})
+
+
+add_library(MSFS_Internal SHARED ${SOURCES})
+add_library(kiero STATIC ${KIERO_SOURCES})
+
+
+target_link_libraries(MSFS_Internal PRIVATE kiero ${KERNEL32_LIBRARY} ${USER32_LIBRARY} ${GDI32_LIBRARY} ${D3D11_LIBRARY} ${DXGI_LIBRARY})
+target_link_libraries(kiero PRIVATE ${CMAKE_SOURCE_DIR}/dependencies/minhook/lib/minhook.lib)
