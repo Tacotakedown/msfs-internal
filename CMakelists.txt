@@ -1,41 +1,70 @@
 cmake_minimum_required(VERSION 3.10)
-project(MSFS_Internal)
+project(MSFS_Thuggy)
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(SOURCES
-    src/main.cpp
-    src/main.h
     dependencies/imgui/imgui.cpp
     dependencies/imgui/imgui_demo.cpp
     dependencies/imgui/imgui_draw.cpp
-    dependencies/imgui/imgui_widgets.cpp
     dependencies/imgui/imgui_impl_dx11.cpp
     dependencies/imgui/imgui_impl_win32.cpp
-)
-
-set(KIERO_SOURCES
+    dependencies/imgui/imgui_widgets.cpp
     dependencies/kiero/kiero.cpp
+    dependencies/kiero/minhook/src/buffer.c
+    dependencies/kiero/minhook/src/hde/hde32.c
+    dependencies/kiero/minhook/src/hde/hde64.c
+    dependencies/kiero/minhook/src/hook.c
+    dependencies/kiero/minhook/src/trampoline.c
+    src/main.cpp
 )
 
 include_directories(dependencies/imgui)
 include_directories(dependencies/kiero)
-include_directories(dependencies/minhook/include)
+
+add_library(MSFS_Thuggy SHARED ${SOURCES})
 
 
-set(DIRECTX_SDK_LIB_DIR "C:/Program Files (x86)/Microsoft DirectX SDK (June 2010)/Lib/x64")
+target_include_directories(MSFS_Thuggy PRIVATE
+    "imgui"
+    "imgui/examples"
+    "kiero"
+    "kiero/minhook/include"
+    "kiero/minhook/src"
+    "kiero/minhook/src/hde"
+)
 
-find_library(KERNEL32_LIBRARY kernel32.lib PATHS "C:/Program Files (x86)/Windows Kits/10/Lib/10.0.22621.0/um/x64/")
-find_library(USER32_LIBRARY user32.lib PATHS "C:/Program Files (x86)/Windows Kits/10/Lib/10.0.22621.0/um/x64/")
-find_library(GDI32_LIBRARY gdi32.lib PATHS "C:/Program Files (x86)/Windows Kits/10/Lib/10.0.22621.0/um/x64/")
-find_library(D3D11_LIBRARY d3d11.lib PATHS ${DIRECTX_SDK_LIB_DIR})
-find_library(DXGI_LIBRARY dxgi.lib PATHS ${DIRECTX_SDK_LIB_DIR})
+target_link_directories(MSFS_Thuggy PRIVATE
+    "C:/Program Files (x86)/Microsoft DirectX SDK (June 2010)/Lib/x64"
+)
 
+target_link_libraries(MSFS_Thuggy PRIVATE
+    d3d11.lib
+    dxgi.lib
+)
 
-add_library(MSFS_Internal SHARED ${SOURCES})
-add_library(kiero STATIC ${KIERO_SOURCES})
+target_compile_definitions(MSFS_Thuggy PRIVATE
+    UNICODE
+    _UNICODE
+    WIN32_LEAN_AND_MEAN
+    DIRECTINPUT_VERSION=0x0800
+    NOMINMAX
+)
 
+target_compile_options(MSFS_Thuggy PRIVATE
+    /W3
+    /WX
+    /sdl
+    /permissive-
+    /utf-8
+)
 
-target_link_libraries(MSFS_Internal PRIVATE kiero ${KERNEL32_LIBRARY} ${USER32_LIBRARY} ${GDI32_LIBRARY} ${D3D11_LIBRARY} ${DXGI_LIBRARY})
-target_link_libraries(kiero PRIVATE ${CMAKE_SOURCE_DIR}/dependencies/minhook/lib/minhook.lib)
+set_target_properties(MSFS_Thuggy PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/Debug"
+    ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/Release"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/Debug"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/Release"
+)
+
+source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${SOURCES})
