@@ -11,6 +11,7 @@
 #include <SimConnect.h>
 #include "simvars/simvars.h"
 #include "autopilotOnRoids/AutopilotOnRoids.h"
+#include <sstream>
 
 
 typedef HRESULT (__stdcall*Present)(IDXGISwapChain *pSwapChain, UINT SyncInterval, UINT Flags);

@@ -1,5 +1,6 @@
 #include "main.h"
 
+#include "Console/Console.h"
 
 extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -14,7 +15,8 @@ bool simConnectInitilailzed = false;
 
 enum DATA_DEFINE_ID {
 	THUGZ_DO_DEFINIING,
-	THUGZ_DO_READONLY
+	THUGZ_DO_READONLY,
+	THUGZ_DO_WRITING,
 };
 
 enum DATA_REQUEST_ID {
@@ -22,7 +24,8 @@ enum DATA_REQUEST_ID {
 	THUGZ_DO_READONLY_REQUESTING
 };
 
-AutopilotOnRoids::AutopilotOnRoids apOnTheRoidz;
+Console console;
+AutopilotOnRoids::AutopilotOnRoids apOnTheRoidz(console);
 
 void CALLBACK ThuggyDispatchProcRD(SIMCONNECT_RECV *pData, DWORD cbData, void *pContext) {
 	switch (pData->dwID) {
@@ -37,16 +40,14 @@ void CALLBACK ThuggyDispatchProcRD(SIMCONNECT_RECV *pData, DWORD cbData, void *p
 				double atcRunwayHeadingDegreesTrue = pSrO->atcRunwayHeadingDegreesTrue;
 
 				apOnTheRoidz.setReadonlyVars(AutopilotOnRoids::SimvarsReadonly{
-						atcRunwayRelativePositionX,
-						atcRunwayRelativePositionY,
-						atcRunwayRelativePositionZ,
-						atcRunwayHeadingDegreesTrue
-					}
-				);
+					atcRunwayRelativePositionX,
+					atcRunwayRelativePositionY,
+					atcRunwayRelativePositionZ,
+					atcRunwayHeadingDegreesTrue
+				});
 			}
 			if (pObjectData->dwRequestID == THUGZ_DO_REQUESTING) {
 				auto pS = reinterpret_cast<AutopilotOnRoids::SimVars *>(&pObjectData->dwData);
-
 
 				double planeHeadingDegreesTrue = pS->planeHeadingDegreesTrue;
 				double planeBankDegrees = pS->planeBankDegrees;
@@ -63,24 +64,34 @@ void CALLBACK ThuggyDispatchProcRD(SIMCONNECT_RECV *pData, DWORD cbData, void *p
 					planeLongitude,
 					planeAltAboveGround
 				});
-
-
-				AutopilotOnRoids::SimVars result = apOnTheRoidz.getWritableVars();
-
-				pS->planeHeadingDegreesTrue = result.planeHeadingDegreesTrue;
-				pS->planeBankDegrees = result.planeBankDegrees;
-				pS->planePitchDegrees = result.planePitchDegrees;
-				pS->planeLatitude = result.planeLatitude;
-				pS->planeLongitude = result.planeLongitude;
-				pS->planeAltAboveGround = result.planeAltAboveGround;
-
-				SimConnect_SetDataOnSimObject(hSimConnect, THUGZ_DO_DEFINIING, SIMCONNECT_OBJECT_ID_USER,
-				                              0, 0, sizeof(AutopilotOnRoids::SimVars), pS);
 			}
+
+			AutopilotOnRoids::SimVars result = apOnTheRoidz.getWritableVars();
+
+			static bool s_gotResults = false;
+
+
+			SIMCONNECT_DATA_INITPOSITION pos;
+			pos.Altitude = result.planeAltAboveGround;
+			pos.Airspeed = 0;
+			pos.Longitude = result.planeLongitude;
+			pos.Latitude = result.planeLatitude;
+			pos.OnGround = 0;
+			pos.Bank = 0.0;
+			pos.Pitch = 0.0;
+			pos.Heading = result.planeHeadingDegreesTrue;
+
+			HRESULT hr = SimConnect_SetDataOnSimObject(hSimConnect, THUGZ_DO_WRITING,
+			                                           SIMCONNECT_OBJECT_ID_USER,
+			                                           0, 0, sizeof(pos), &pos);
+
+			std::stringstream resultStream;
+
+			resultStream << "Teleported Aircraft" << hr;
+			console.addEntry(resultStream.str());
 		}
 	}
 }
-
 
 bool LoadFont(const std::string &fontFilePath, float fontSize) {
 	ImGuiIO &io = ImGui::GetIO();
@@ -101,7 +112,6 @@ bool LoadFont(const std::string &fontFilePath, float fontSize) {
 
 	return true;
 }
-
 
 void InitImGui() {
 	ImGui::CreateContext();
@@ -195,7 +205,6 @@ void InitImGui() {
 
 HMODULE hMod = nullptr;
 
-
 LRESULT __stdcall WndProc(const HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	if (true && ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam))
 		return true;
@@ -204,13 +213,13 @@ LRESULT __stdcall WndProc(const HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 }
 
 bool isInjected = false;
-bool g_showMenu = false;
+bool g_showMenu = true;
+bool g_teleportEnabled = false;
 
 bool init = false;
 
 void UnloadDll() {
 	isInjected = false;
-
 
 	if (window != nullptr && oWndProc != nullptr) {
 		SetWindowLongPtr(window, GWLP_WNDPROC, (LONG_PTR) oWndProc);
@@ -250,7 +259,7 @@ void handleHotkey() {
 
 HRESULT __stdcall hkPresent(IDXGISwapChain *pSwapChain, UINT SyncInterval, UINT Flags) {
 	if (!init) {
-		if (SUCCEEDED(pSwapChain->GetDevice(__uuidof(ID3D11Device), (void**)& pDevice))) {
+		if (SUCCEEDED(pSwapChain->GetDevice(__uuidof(ID3D11Device), (void **)&pDevice))) {
 			pDevice->GetImmediateContext(&pContext);
 			DXGI_SWAP_CHAIN_DESC sd;
 			pSwapChain->GetDesc(&sd);
@@ -273,19 +282,23 @@ HRESULT __stdcall hkPresent(IDXGISwapChain *pSwapChain, UINT SyncInterval, UINT 
 
 	ImGui::SetNextWindowSizeConstraints(ImVec2(1000, 800), ImVec2(1000, 800));
 
-
 	if (g_showMenu) {
 		ImGui::Begin("Thuggy", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
+		if (ImGui::Button("Teleport")) {
+			SimConnect_CallDispatch(hSimConnect, ThuggyDispatchProcRD, NULL);
+		}
+
+		std::vector<std::string> cns = console.GetConsole();
+		for (const std::string &str: cns) {
+			ImGui::TextUnformatted(str.c_str());
+		}
+		ImGui::End();
 	}
-
-
-	ImGui::End();
 
 	ImGui::Render();
 
 	pContext->OMSetRenderTargets(1, &mainRenderTargetView, NULL);
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-
 
 	handleHotkey();
 
@@ -306,19 +319,18 @@ DWORD WINAPI MainThread(LPVOID lpReserved) {
 	if (SUCCEEDED(SimConnect_Open(&hSimConnect, "ThugwareFRGetWithTheProgramLilNigga", NULL, 0, 0, 0))) {
 		simConnectInitilailzed = true;
 
-
 		SimConnect_AddToDataDefinition(hSimConnect, THUGZ_DO_READONLY,
 		                               vars.getSimVarName(SimVarsEnum::ATC_RUNWAY_RELATIVE_POSITION_X),
-		                               vars.getSimVarUnit(SimVarUnits::METERS));
+		                               vars.getSimVarUnit(SimVarUnits::METERS), SIMCONNECT_DATATYPE_FLOAT64);
 		SimConnect_AddToDataDefinition(hSimConnect, THUGZ_DO_READONLY,
 		                               vars.getSimVarName(SimVarsEnum::ATC_RUNWAY_RELATIVE_POSITION_Y),
-		                               vars.getSimVarUnit(SimVarUnits::METERS));
+		                               vars.getSimVarUnit(SimVarUnits::METERS), SIMCONNECT_DATATYPE_FLOAT64);
 		SimConnect_AddToDataDefinition(hSimConnect, THUGZ_DO_READONLY,
 		                               vars.getSimVarName(SimVarsEnum::ATC_RUNWAY_RELATIVE_POSITION_Z),
-		                               vars.getSimVarUnit(SimVarUnits::METERS));
+		                               vars.getSimVarUnit(SimVarUnits::METERS), SIMCONNECT_DATATYPE_FLOAT64);
 		SimConnect_AddToDataDefinition(hSimConnect, THUGZ_DO_READONLY,
 		                               vars.getSimVarName(SimVarsEnum::ATC_RUNWAY_HEADING_DEGREES_TRUE),
-		                               vars.getSimVarUnit(SimVarUnits::DEGREES));
+		                               vars.getSimVarUnit(SimVarUnits::DEGREES), SIMCONNECT_DATATYPE_FLOAT64);
 
 		SimConnect_AddToDataDefinition(hSimConnect, THUGZ_DO_DEFINIING,
 		                               vars.getSimVarName(SimVarsEnum::PLANE_HEADING_DEGREES_TRUE),
@@ -343,22 +355,31 @@ DWORD WINAPI MainThread(LPVOID lpReserved) {
 		                               vars.getSimVarName(SimVarsEnum::PLANE_ALT_ABOVE_GROUND),
 		                               vars.getSimVarUnit(SimVarUnits::FEET));
 
-		SimConnect_RequestDataOnSimObject(hSimConnect, THUGZ_DO_REQUESTING, THUGZ_DO_DEFINIING,
-		                                  SIMCONNECT_OBJECT_ID_USER, SIMCONNECT_PERIOD_SIM_FRAME);
+		HRESULT hr = SimConnect_AddToDataDefinition(hSimConnect, THUGZ_DO_WRITING, "Initial Position", NULL,
+		                                            SIMCONNECT_DATATYPE_INITPOSITION);
 
-		SimConnect_RequestDataOnSimObject(hSimConnect, THUGZ_DO_READONLY_REQUESTING, THUGZ_DO_READONLY,
-		                                  SIMCONNECT_OBJECT_ID_USER, SIMCONNECT_PERIOD_SIM_FRAME);
+		std::stringstream stream;
+
+		stream << "Data Defs:" << hr;
+
+		console.addEntry(stream.str());
+
+
+		SimConnect_RequestDataOnSimObject(hSimConnect, THUGZ_DO_REQUESTING, THUGZ_DO_DEFINIING,
+		                                  SIMCONNECT_OBJECT_ID_USER, SIMCONNECT_PERIOD_VISUAL_FRAME);
 	}
 
 	while (true) {
-		if (simConnectInitilailzed) {
-			SimConnect_CallDispatch(hSimConnect, ThuggyDispatchProcRD, NULL);
+		if (g_teleportEnabled) {
+			if (simConnectInitilailzed) {
+				g_teleportEnabled = false;
+			}
 		}
 
-		if (GetAsyncKeyState(VK_INSERT) % 1) {
+		if (GetAsyncKeyState(VK_DELETE) % 1) {
 			g_showMenu = true;
 		}
-		Sleep(1);
+		Sleep(100);
 
 		// add some way to panic out of simconnect if it breaks, best way is just to restart the game tho ngl
 	}

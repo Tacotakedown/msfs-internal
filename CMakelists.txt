@@ -25,6 +25,12 @@ set(SOURCES
         src/RadiansDegreesUtils/RadiansDegreesUtils.h
         src/RadiansDegreesUtils/RadiansDegreesUtils.cpp
         src/simvars/simvars.cpp
+        src/Console/Console.h
+        src/Console/Console.cpp
+)
+
+include_directories(
+
 )
 
 include_directories(dependencies/imgui)
@@ -42,6 +48,7 @@ target_include_directories(MSFS_Thuggy PRIVATE
         "kiero/minhook/include"
         "kiero/minhook/src"
         "kiero/minhook/src/hde"
+        "src"
 
 )
 
